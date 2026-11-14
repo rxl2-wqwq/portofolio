@@ -1,6 +1,9 @@
 # build output
 dist/
 
+.vscode/
+AGENTS.md
+
 # generated types
 .astro/
 
