@@ -1,0 +1,32 @@
+---
+const navLinks = [
+  { name: "about", href: "#about" },
+  { name: "projects", href: "#projects" },
+  { name: "skills", href: "#skills" },
+  { name: "contact", href: "#contact" },
+];
+---
+
+<nav class="fixed top-0 w-full z-50 bg-bg/80 backdrop-blur-md border-b border-bg-secondary">
+  <div class="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
+    <!-- Logo -->
+    <a
+      href="#"
+      class="text-accent font-semibold text-lg hover:text-accent-hover transition-colors"
+    >
+      &lt;/&gt;
+    </a>
+
+    <!-- Nav Links -->
+    <div class="flex items-center gap-6">
+      {navLinks.map((link) => (
+        <a
+          href={link.href}
+          class="text-text-muted text-sm hover:text-text transition-colors duration-200"
+        >
+          {link.name}
+        </a>
+      ))}
+    </div>
+  </div>
+</nav>
