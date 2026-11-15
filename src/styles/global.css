@@ -1,16 +1,15 @@
-@import url("https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@300;400;500;600;700&display=swap");
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #323437;
-  --color-bg-secondary: #2c2e31;
-  --color-bg-tertiary: #1e1f21;
-  --color-text: #d1d0c5;
-  --color-text-muted: #646669;
-  --color-accent: #e2b714;
-  --color-accent-hover: #c9a312;
-  --color-error: #ca4754;
-  --font-mono: "Roboto Mono", monospace;
+  --color-bg: #2b2d33;
+  --color-bg-secondary: #252730;
+  --color-bg-tertiary: #1c1d24;
+  --color-text: #cdd0d6;
+  --color-text-muted: #5c5f6e;
+  --color-accent: #4ec9b0;
+  --color-accent-hover: #3db89f;
+  --color-error: #f44747;
+  --font-mono: "JetBrains Mono", "Roboto Mono", monospace;
 }
 
 html {
