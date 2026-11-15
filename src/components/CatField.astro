@@ -1,0 +1,246 @@
+---
+const cats = [
+  { src: "/cats/cat1.png", w: 308, h: 370 },
+  { src: "/cats/cat2.png", w: 275, h: 344 },
+  { src: "/cats/cat3.png", w: 302, h: 342 },
+  { src: "/cats/cats1.png", w: 290, h: 355 },
+  { src: "/cats/cats2.png", w: 288, h: 345 },
+  { src: "/cats/cats3.png", w: 333, h: 359 },
+];
+---
+
+<div class="cat-field" aria-hidden="true">
+  {cats.map((cat) => (
+    <div class="cat">
+      <img src={cat.src} width={cat.w} height={cat.h} alt="" class="cat__img" />
+    </div>
+  ))}
+</div>
+
+<style>
+  .cat-field {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .cat {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: clamp(64px, 8vw, 120px);
+    opacity: 0;
+    transition: opacity 800ms ease; /* samakan dengan FADE_MS di script */
+    will-change: transform, opacity;
+  }
+
+  .cat__img {
+    display: block;
+    width: 100%;
+    height: auto;
+    image-rendering: pixelated;
+    transform-origin: center;
+    animation: cat-spin 9s linear infinite;
+  }
+
+  @keyframes cat-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @media (max-width: 1023px) {
+    .cat-field {
+      display: none;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .cat__img {
+      animation: none;
+    }
+    .cat {
+      transition: none;
+    }
+  }
+</style>
+
+<script>
+  const FADE_MS = 800; // harus sama dengan transition opacity di CSS
+  const CONTENT_W = 48 * 16; // max-w-3xl = 48rem = 768px
+
+  const reduceMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
+  const rand = (min, max) => min + Math.random() * (max - min);
+
+  const field = document.querySelector(".cat-field");
+
+  const cats = field
+    ? Array.from(field.querySelectorAll(".cat")).map((el) => ({
+        el,
+        x: 0,
+        y: 0,
+        vx: 0,
+        vy: 0,
+        w: 0,
+        h: 0,
+        zone: 0, // 0 = kiri, 1 = kanan
+        state: "active", // active | out | in
+        timer: 0,
+      }))
+    : [];
+
+  let fieldW = 0;
+  let fieldH = 0;
+  let margin = 0;
+
+  function zoneBounds(c) {
+    const minX = c.zone === 0 ? 0 : fieldW - margin;
+    const maxX = c.zone === 0 ? margin : fieldW;
+    return { minX, maxX };
+  }
+
+  function paint(c) {
+    c.el.style.transform = `translate3d(${c.x}px, ${c.y}px, 0)`;
+  }
+
+  function place(c) {
+    const { minX, maxX } = zoneBounds(c);
+    const maxXPos = Math.max(minX, maxX - c.w);
+    const maxYPos = Math.max(0, fieldH - c.h);
+
+    const pad = 12;
+    const loX = Math.min(minX + pad, maxXPos);
+    const hiX = Math.max(loX, maxXPos - pad);
+    const loY = Math.min(pad, maxYPos);
+    const hiY = Math.max(loY, maxYPos - pad);
+
+    c.x = rand(loX, hiX);
+    c.y = rand(loY, hiY);
+
+    // Arah horizontal menjauhi tepi terdekat, biar tidak langsung mental lagi
+    const center = (minX + maxX) / 2;
+    const towardCenter = c.x + c.w / 2 < center ? 1 : -1;
+    const speed = rand(0.3, 0.8);
+    const angle = rand(0.15, 0.85) * Math.PI;
+
+    c.vx = Math.cos(angle) * speed * towardCenter;
+    c.vy = (Math.random() < 0.5 ? -1 : 1) * Math.sin(angle) * speed;
+
+    paint(c);
+  }
+
+  function measure() {
+    if (!field) return;
+
+    fieldW = field.clientWidth;
+    fieldH = field.clientHeight;
+    margin = Math.max(0, (fieldW - CONTENT_W) / 2);
+
+    for (const c of cats) {
+      c.w = c.el.offsetWidth;
+      c.h = c.el.offsetHeight;
+
+      if (c.state === "active") {
+        const { minX, maxX } = zoneBounds(c);
+        c.x = Math.min(Math.max(c.x, minX), Math.max(minX, maxX - c.w));
+        c.y = Math.min(Math.max(c.y, 0), Math.max(0, fieldH - c.h));
+        paint(c);
+      }
+    }
+  }
+
+  function startFadeOut(c) {
+    if (c.state !== "active") return;
+
+    c.state = "out";
+    c.el.style.opacity = "0";
+
+    clearTimeout(c.timer);
+    c.timer = setTimeout(() => {
+      // pilih sisi acak: kiri atau kanan
+      c.zone = Math.random() < 0.5 ? 0 : 1;
+      place(c);
+
+      c.state = "in";
+      c.el.style.opacity = "1";
+
+      c.timer = setTimeout(() => {
+        c.state = "active";
+      }, FADE_MS);
+    }, FADE_MS);
+  }
+
+  function step(dt) {
+    if (fieldW <= 0 || fieldH <= 0) return;
+
+    for (const c of cats) {
+      if (c.state !== "active") continue;
+
+      c.x += c.vx * dt;
+      c.y += c.vy * dt;
+
+      const { minX, maxX } = zoneBounds(c);
+      const maxXPos = Math.max(minX, maxX - c.w);
+      const maxYPos = Math.max(0, fieldH - c.h);
+
+      let hit = false;
+
+      if (c.x <= minX) {
+        c.x = minX;
+        hit = true;
+      } else if (c.x >= maxXPos) {
+        c.x = maxXPos;
+        hit = true;
+      }
+
+      if (c.y <= 0) {
+        c.y = 0;
+        hit = true;
+      } else if (c.y >= maxYPos) {
+        c.y = maxYPos;
+        hit = true;
+      }
+
+      paint(c);
+
+      if (hit) startFadeOut(c);
+    }
+  }
+
+  if (field) {
+    measure();
+
+    // posisi awal acak, lalu fade-in
+    for (const c of cats) {
+      c.zone = Math.random() < 0.5 ? 0 : 1;
+      place(c);
+      c.el.style.opacity = "1";
+      c.state = "active";
+    }
+
+    if (!reduceMotion) {
+      let last = performance.now();
+
+      const loop = (now) => {
+        const dt = Math.min(now - last, 50) / 16.667;
+        last = now;
+        step(dt);
+        requestAnimationFrame(loop);
+      };
+
+      requestAnimationFrame(loop);
+    }
+
+    let resizeTimer;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(measure, 150);
+    });
+
+    window.addEventListener("load", measure);
+  }
+</script>
