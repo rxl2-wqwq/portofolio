@@ -1,0 +1,125 @@
+---
+const cats = [
+  { src: "/cats/cat1.png", w: 308, h: 370 },
+  { src: "/cats/cat2.png", w: 275, h: 344 },
+  { src: "/cats/cat3.png", w: 302, h: 342 },
+  { src: "/cats/cats1.png", w: 290, h: 355 },
+  { src: "/cats/cats2.png", w: 288, h: 345 },
+  { src: "/cats/cats3.png", w: 333, h: 359 },
+];
+
+const catSrcs = cats.map((c) => c.src);
+---
+
+<!-- Mobile: touch cats -->
+<div
+  class="cat-touch-layer"
+  data-cats={JSON.stringify(catSrcs)}
+  aria-hidden="true"
+></div>
+
+<style>
+  .cat-touch-layer {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 50;
+    overflow: hidden;
+    display: none;
+  }
+
+  /* Mobile only */
+  @media (max-width: 1023px) {
+    .cat-touch-layer {
+      display: block;
+    }
+  }
+
+  /* :global wajib — elemen ini dibuat lewat JS, bukan dari template,
+     jadi tidak punya atribut data-astro-cid */
+  :global(.touch-cat) {
+    position: absolute;
+    width: 32px;
+    height: 32px;
+    pointer-events: none;
+    object-fit: contain;
+    image-rendering: pixelated;
+    transform-origin: center;
+    will-change: transform, opacity;
+    animation: touch-cat-spin 1.8s ease-out forwards;
+  }
+
+  @keyframes touch-cat-spin {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, -50%) rotate(0deg) scale(0.3);
+    }
+    15% {
+      opacity: 1;
+      transform: translate(-50%, -50%) rotate(60deg) scale(1);
+    }
+    65% {
+      opacity: 1;
+      transform: translate(-50%, -50%) rotate(300deg) scale(1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -50%) rotate(360deg) scale(0.9);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.touch-cat) {
+      animation: none;
+    }
+  }
+</style>
+
+<script>
+  const touchLayer = document.querySelector<HTMLElement>(".cat-touch-layer");
+  if (touchLayer) {
+    const reduceMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const catSrcs: string[] = JSON.parse(touchLayer.dataset.cats || "[]");
+    const MAX_CATS = 3;
+    const LIFETIME_MS = 1800;
+    let activeTouchCats = 0;
+
+    function spawnCat(x: number, y: number) {
+      if (reduceMotion) return;
+      if (activeTouchCats >= MAX_CATS || catSrcs.length === 0) return;
+
+      const img = document.createElement("img");
+      img.src = catSrcs[Math.floor(Math.random() * catSrcs.length)];
+      img.className = "touch-cat";
+      img.alt = "";
+      img.style.left = `${x}px`;
+      img.style.top = `${y}px`;
+
+      touchLayer.appendChild(img);
+      activeTouchCats++;
+
+      const cleanup = () => {
+        if (!img.isConnected) return;
+        img.remove();
+        activeTouchCats--;
+      };
+
+      img.addEventListener("animationend", cleanup, { once: true });
+      img.addEventListener("animationcancel", cleanup, { once: true });
+      // jaring pengaman kalau animation-end tidak pernah fire
+      setTimeout(cleanup, LIFETIME_MS + 200);
+    }
+
+    document.addEventListener(
+      "pointerdown",
+      (e: PointerEvent) => {
+        if (window.innerWidth >= 1024) return;
+        if (e.pointerType === "mouse") return;
+        spawnCat(e.clientX, e.clientY);
+      },
+      { passive: true },
+    );
+  }
+</script>

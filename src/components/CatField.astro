@@ -68,18 +68,32 @@ const cats = [
 </style>
 
 <script>
-  const FADE_MS = 800; // harus sama dengan transition opacity di CSS
-  const CONTENT_W = 48 * 16; // max-w-3xl = 48rem = 768px
+  const FADE_MS = 800;
+  const CONTENT_W = 48 * 16;
 
   const reduceMotion = window.matchMedia(
     "(prefers-reduced-motion: reduce)",
   ).matches;
-  const rand = (min, max) => min + Math.random() * (max - min);
+  const rand = (min: number, max: number): number =>
+    min + Math.random() * (max - min);
 
-  const field = document.querySelector(".cat-field");
+  interface Cat {
+    el: HTMLElement;
+    x: number;
+    y: number;
+    vx: number;
+    vy: number;
+    w: number;
+    h: number;
+    zone: number;
+    state: string;
+    timer: ReturnType<typeof setTimeout>;
+  }
 
-  const cats = field
-    ? Array.from(field.querySelectorAll(".cat")).map((el) => ({
+  const field = document.querySelector<HTMLElement>(".cat-field");
+
+  const cats: Cat[] = field
+    ? Array.from(field.querySelectorAll<HTMLElement>(".cat")).map((el) => ({
         el,
         x: 0,
         y: 0,
@@ -87,9 +101,9 @@ const cats = [
         vy: 0,
         w: 0,
         h: 0,
-        zone: 0, // 0 = kiri, 1 = kanan
-        state: "active", // active | out | in
-        timer: 0,
+        zone: 0,
+        state: "active",
+        timer: setTimeout(() => {}, 0),
       }))
     : [];
 
@@ -97,17 +111,35 @@ const cats = [
   let fieldH = 0;
   let margin = 0;
 
-  function zoneBounds(c) {
+  function zoneBounds(c: Cat) {
     const minX = c.zone === 0 ? 0 : fieldW - margin;
     const maxX = c.zone === 0 ? margin : fieldW;
     return { minX, maxX };
   }
 
-  function paint(c) {
+  function paint(c: Cat) {
     c.el.style.transform = `translate3d(${c.x}px, ${c.y}px, 0)`;
   }
 
-  function place(c) {
+  // Check if a position overlaps with existing placed cats
+  function overlapsOthers(
+    c: Cat,
+    cx: number,
+    cy: number,
+    placed: Cat[],
+  ): boolean {
+    const aR = (c.w + c.h) / 4;
+    for (const other of placed) {
+      const bR = (other.w + other.h) / 4;
+      const dx = cx + c.w / 2 - (other.x + other.w / 2);
+      const dy = cy + c.h / 2 - (other.y + other.h / 2);
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < aR + bR + 10) return true; // +10px padding
+    }
+    return false;
+  }
+
+  function place(c: Cat, placed: Cat[] = []) {
     const { minX, maxX } = zoneBounds(c);
     const maxXPos = Math.max(minX, maxX - c.w);
     const maxYPos = Math.max(0, fieldH - c.h);
@@ -118,10 +150,14 @@ const cats = [
     const loY = Math.min(pad, maxYPos);
     const hiY = Math.max(loY, maxYPos - pad);
 
-    c.x = rand(loX, hiX);
-    c.y = rand(loY, hiY);
+    // Try up to 20 times to find a non-overlapping position
+    let attempts = 0;
+    do {
+      c.x = rand(loX, hiX);
+      c.y = rand(loY, hiY);
+      attempts++;
+    } while (overlapsOthers(c, c.x, c.y, placed) && attempts < 20);
 
-    // Arah horizontal menjauhi tepi terdekat, biar tidak langsung mental lagi
     const center = (minX + maxX) / 2;
     const towardCenter = c.x + c.w / 2 < center ? 1 : -1;
     const speed = rand(0.3, 0.8);
@@ -152,8 +188,29 @@ const cats = [
       }
     }
   }
+  function keepInside(c: Cat) {
+    const { minX, maxX } = zoneBounds(c);
+    const maxXPos = Math.max(minX, maxX - c.w);
+    const maxYPos = Math.max(0, fieldH - c.h);
 
-  function startFadeOut(c) {
+    if (c.x < minX) {
+      c.x = minX;
+      c.vx = Math.abs(c.vx);
+    } else if (c.x > maxXPos) {
+      c.x = maxXPos;
+      c.vx = -Math.abs(c.vx);
+    }
+
+    if (c.y < 0) {
+      c.y = 0;
+      c.vy = Math.abs(c.vy);
+    } else if (c.y > maxYPos) {
+      c.y = maxYPos;
+      c.vy = -Math.abs(c.vy);
+    }
+  }
+
+  function startFadeOut(c: Cat) {
     if (c.state !== "active") return;
 
     c.state = "out";
@@ -161,9 +218,9 @@ const cats = [
 
     clearTimeout(c.timer);
     c.timer = setTimeout(() => {
-      // pilih sisi acak: kiri atau kanan
       c.zone = Math.random() < 0.5 ? 0 : 1;
-      place(c);
+      const activeCats = cats.filter((o) => o !== c && o.state === "active");
+      place(c, activeCats);
 
       c.state = "in";
       c.el.style.opacity = "1";
@@ -174,7 +231,60 @@ const cats = [
     }, FADE_MS);
   }
 
-  function step(dt) {
+  function checkCollisions() {
+    for (let i = 0; i < cats.length; i++) {
+      const a = cats[i];
+      if (a.state !== "active") continue;
+
+      for (let j = i + 1; j < cats.length; j++) {
+        const b = cats[j];
+        if (b.state !== "active") continue;
+
+        const aCx = a.x + a.w / 2;
+        const aCy = a.y + a.h / 2;
+        const bCx = b.x + b.w / 2;
+        const bCy = b.y + b.h / 2;
+
+        const dx = bCx - aCx;
+        const dy = bCy - aCy;
+
+        const aR = (a.w + a.h) / 4;
+        const bR = (b.w + b.h) / 4;
+        const minDist = aR + bR;
+
+        const distSq = dx * dx + dy * dy;
+
+        if (distSq < minDist * minDist && distSq > 0) {
+          const dist = Math.sqrt(distSq);
+          const nx = dx / dist;
+          const ny = dy / dist;
+
+          const dvx = a.vx - b.vx;
+          const dvy = a.vy - b.vy;
+          const dvn = dvx * nx + dvy * ny;
+
+          if (dvn > 0) {
+            a.vx -= dvn * nx;
+            a.vy -= dvn * ny;
+            b.vx += dvn * nx;
+            b.vy += dvn * ny;
+          }
+
+          // Push apart firmly to prevent sticking
+          const overlap = minDist - dist;
+          const sep = overlap / 2 + 2;
+          a.x -= sep * nx;
+          a.y -= sep * ny;
+          b.x += sep * nx;
+          b.y += sep * ny;
+          keepInside(a);
+          keepInside(b);
+        }
+      }
+    }
+  }
+
+  function step(dt: number) {
     if (fieldW <= 0 || fieldH <= 0) return;
 
     for (const c of cats) {
@@ -189,35 +299,40 @@ const cats = [
 
       let hit = false;
 
-      if (c.x <= minX) {
+      if (c.x < minX) {
         c.x = minX;
         hit = true;
-      } else if (c.x >= maxXPos) {
+      } else if (c.x > maxXPos) {
         c.x = maxXPos;
         hit = true;
       }
 
-      if (c.y <= 0) {
+      if (c.y < 0) {
         c.y = 0;
         hit = true;
-      } else if (c.y >= maxYPos) {
+      } else if (c.y > maxYPos) {
         c.y = maxYPos;
         hit = true;
       }
 
-      paint(c);
-
       if (hit) startFadeOut(c);
+    }
+
+    checkCollisions();
+
+    for (const c of cats) {
+      if (c.state === "active") paint(c);
     }
   }
 
   if (field) {
     measure();
 
-    // posisi awal acak, lalu fade-in
+    const placed: Cat[] = [];
     for (const c of cats) {
       c.zone = Math.random() < 0.5 ? 0 : 1;
-      place(c);
+      place(c, placed);
+      placed.push(c);
       c.el.style.opacity = "1";
       c.state = "active";
     }
@@ -225,7 +340,7 @@ const cats = [
     if (!reduceMotion) {
       let last = performance.now();
 
-      const loop = (now) => {
+      const loop = (now: number) => {
         const dt = Math.min(now - last, 50) / 16.667;
         last = now;
         step(dt);
@@ -235,7 +350,7 @@ const cats = [
       requestAnimationFrame(loop);
     }
 
-    let resizeTimer;
+    let resizeTimer: ReturnType<typeof setTimeout>;
     window.addEventListener("resize", () => {
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(measure, 150);
