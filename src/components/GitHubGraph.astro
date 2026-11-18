@@ -1,0 +1,168 @@
+---
+const username = "rxl2-wqwq";
+const currentYear = new Date().getFullYear();
+const years = [currentYear, currentYear - 1]; // 2026, 2025
+
+interface YearData {
+  year: number;
+  total: number;
+  weeks: any[];
+}
+
+const allYears: YearData[] = [];
+
+for (const year of years) {
+  const from = `${year}-01-01T00:00:00Z`;
+  const to = `${year}-12-31T23:59:59Z`;
+
+  const query = `query { user(login: "${username}") { contributionsCollection(from:
+      "${from}", to: "${to}") { contributionCalendar { totalContributions weeks {
+      contributionDays { contributionCount date } } } } } }`;
+
+  try {
+    const res = await fetch("https://api.github.com/graphql", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `bearer ${import.meta.env.GITHUB_TOKEN}`,
+      },
+      body: JSON.stringify({ query }),
+    });
+    const data = await res.json();
+    const cal = data.data.user.contributionsCollection.contributionCalendar;
+    allYears.push({ year, total: cal.totalContributions, weeks: cal.weeks });
+  } catch (e) {
+    console.error(`Failed to fetch ${year}`, e);
+  }
+}
+
+function getColor(count: number): string {
+  if (count === 0) return "#1c1d24";
+  if (count <= 2) return "rgba(78,201,176,0.25)";
+  if (count <= 5) return "rgba(78,201,176,0.5)";
+  if (count <= 8) return "rgba(78,201,176,0.75)";
+  return "#4ec9b0";
+}
+---
+
+<section id="contributions" class="py-24 px-6">
+  <div class="max-w-3xl mx-auto">
+    <h2 class="text-text-muted text-sm tracking-widest mb-8">
+      <span class="text-accent">~</span>/rzal/contributions
+    </h2>
+
+    <div class="year-buttons">
+      {allYears.map((yd, i) => (
+        <button
+          class={`year-btn ${i === 0 ? "active" : ""}`}
+          data-year={yd.year}
+        >
+          {yd.year}
+        </button>
+      ))}
+    </div>
+
+    {allYears.map((yd, i) => (
+      <div class={`year-graph ${i === 0 ? "" : "hidden"}`} data-graph={yd.year}>
+        <p class="text-text text-sm mb-4">
+          {yd.total} contributions in {yd.year}
+        </p>
+        <div class="overflow-x-auto pb-2">
+          <div class="graph-grid">
+            {yd.weeks.map((week: any) => (
+              <div class="graph-col">
+                {week.contributionDays.map((day: any) => (
+                  <div
+                    class="graph-cell"
+                    title={`${day.date}: ${day.contributionCount} contributions`}
+                    style={`background:${getColor(day.contributionCount)}`}
+                  ></div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    ))}
+
+    <div class="legend">
+      <span>less</span>
+      <div class="graph-cell" style="background:#1c1d24"></div>
+      <div class="graph-cell" style="background:rgba(78,201,176,0.25)"></div>
+      <div class="graph-cell" style="background:rgba(78,201,176,0.5)"></div>
+      <div class="graph-cell" style="background:rgba(78,201,176,0.75)"></div>
+      <div class="graph-cell" style="background:#4ec9b0"></div>
+      <span>more</span>
+    </div>
+  </div>
+</section>
+
+<style>
+  .graph-grid {
+    display: flex;
+    gap: 3px;
+  }
+  .graph-col {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .graph-cell {
+    width: 10px;
+    height: 10px;
+    border-radius: 2px;
+  }
+  .legend {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 16px;
+    color: #5c5f6e;
+    font-size: 12px;
+  }
+  .year-buttons {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .year-btn {
+    padding: 4px 16px;
+    border-radius: 4px;
+    border: none;
+    background: #1c1d24;
+    color: #5c5f6e;
+    font-family: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .year-btn:hover {
+    color: #cdd0d6;
+  }
+  .year-btn.active {
+    background: #4ec9b0;
+    color: #1c1d24;
+    font-weight: 600;
+  }
+  .hidden {
+    display: none;
+  }
+</style>
+
+<script>
+  const buttons = document.querySelectorAll<HTMLButtonElement>(".year-btn");
+  const graphs = document.querySelectorAll<HTMLElement>(".year-graph");
+
+  buttons.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const year = btn.dataset.year;
+
+      buttons.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      graphs.forEach((g) => {
+        g.classList.toggle("hidden", g.dataset.graph !== year);
+      });
+    });
+  });
+</script>
